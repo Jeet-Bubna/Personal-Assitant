@@ -1,0 +1,2 @@
+def music():
+    pass
