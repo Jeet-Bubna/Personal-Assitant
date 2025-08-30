@@ -46,6 +46,7 @@ def linker(text: str) -> str:
     category = ''
 
     match = combined_pattern.search(text)
+    print(match)
     if match:
         category = match.lastgroup
     else:
@@ -59,4 +60,5 @@ def linker(text: str) -> str:
         case 'search':
             search.search(text)
     
-    print(f"CATEGORY: {category}. Program has been sent to func")
+    #print(f"CATEGORY: {category}. Program has been sent to func")
+    return category
