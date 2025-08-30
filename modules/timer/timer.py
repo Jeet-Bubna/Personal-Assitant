@@ -1,2 +1,2 @@
-def timer():
+def timer(text):
     pass

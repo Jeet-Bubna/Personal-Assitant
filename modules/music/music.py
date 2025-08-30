@@ -1,2 +1,2 @@
-def music():
+def music(text):
     pass

@@ -1,12 +1,62 @@
-def linker(text: str) -> str:
-    keywords = {
+import re
+from modules import music
+from modules import timer
+from modules import search
+
+# Defining Keywords which have to be present in the text for the program to detect
+# Sometime, maybe we'll make use another more efficient system to get what is the main task, some day 
+
+keywords = {
         "music": ['play', 'pause', 'stop', 'next', 'previous'],
         "search": ['search', 'find', 'lookup'],
         "timer": ['set timer', 'start timer', 'stop timer', 'set a timer', 'start a timer', 'stop the timer']
     }
 
+#  #"(?P<music>\bplay\b|\bpause\b|\bstop\b)|(?P<timer>\bset timer\b|\bstart timer\b|\bstop timer\b)
+# This is the format that we need the REGEX pattern to look like. The ?P thing is to define the grpname
+# So that we can easily backtrack and return the group name if found. The \b just finds a blank space,
+# Effectively ensuring that its a word, as a word as a blank space before and after it. The | symbol 
+# is an or symbol, so either play or pause or search if found, like that. Read this later and see if 
+# This explanation makes sense lmao. Then, you just compile it, and the re.compile() function does most 
+# of the job for you, you just need to add the | between groups because that way uk u can seperate grps 
+# and stuff. Then we just add the closing bracket and works.
 
-# USE REGEX FOR THIS, RN I GOTTA GO STUDY FOR EXAMS
-# What is regex: Reg ex: regular expresssions, faster than looping over each text to find keywords, 
-# instead compile the keywords into a pattern and search the text with it, there are 2 types of 
-# engines used to perform regex: DFA (Deterministic Finite Automaton) and NFA (Non-deterministic Finite Automaton)
+pattern_parts = []
+for category, words in keywords.items():
+    words = [rf'\b{word}\b' for word in words]
+    pattern = f'(?P<{category}>' + r"|".join(words) + ")"
+    pattern_parts.append(pattern)
+
+combined_pattern = re.compile("|".join(pattern_parts), re.IGNORECASE)
+
+def linker(text: str) -> str:
+    """
+    Links the different programs by calling them.
+
+    Args:
+    text (str): Takes the string obtained from the TTS as input
+
+    Output:
+    Outputs the confirmation string "success" if the text is sent to the concerned program
+
+    Basically, takes the text, searches for the keywords using regex, and then calls the
+    Requried program for the category detected.
+    
+    """
+    category = ''
+
+    match = combined_pattern.search(text)
+    if match:
+        category = match.lastgroup
+    else:
+        return None
+    
+    match category:
+        case 'music':
+            music.music(text)
+        case 'timer':
+            timer.timer(text)
+        case 'search':
+            search.search(text)
+    
+    print(f"CATEGORY: {category}. Program has been sent to func")
