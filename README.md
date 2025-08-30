@@ -18,3 +18,8 @@ While using a for loop, for example in this code
 What this does, it basically loops over each word in text, and the `in` keyword breaks the text into substrings which are of same size as the search term, here music. So, its really inneffcient, as the worst case senerio states the maximum time complexity as O(m*n).  
 So, instead of doing this, the NFA checks each letter, and compares it with the target, and updates states accordingly.  
 Not gonna explain it here right now, cuz I wanna implement this rather than typing this out lmao, if future jeet is reading this, visit [What is Finite Automata](https://www.tutorialspoint.com/automata_theory/what_is_finite_automata.htm)
+
+### Unittest module
+Using unittest module to perform unit tests, the @patch keyword, which runs a mock instance of the module rather than running the module. Why we wanna do this? Because running the actual functions will have unintended consequences like it might actually place music, we dont want that as that reduces speed and also makes it annoying.  
+The linker test for example goes through all the keywords, and uses the self.assertEqual() function to basically say that 'if a == b' then it passes, otherwise not. Its like assert statments but more robust with more functionality.  
+The reason that I prefer unittest over pytest is that it is built in python, so less installations so yay!

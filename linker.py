@@ -7,9 +7,10 @@ from modules import search
 # Sometime, maybe we'll make use another more efficient system to get what is the main task, some day 
 
 keywords = {
+    "timer": ['set timer', 'start timer', 'stop timer', 'set a timer', 'start a timer', 'stop the timer'],
         "music": ['play', 'pause', 'stop', 'next', 'previous'],
-        "search": ['search', 'find', 'lookup'],
-        "timer": ['set timer', 'start timer', 'stop timer', 'set a timer', 'start a timer', 'stop the timer']
+        "search": ['search', 'find', 'lookup']
+        
     }
 
 #  #"(?P<music>\bplay\b|\bpause\b|\bstop\b)|(?P<timer>\bset timer\b|\bstart timer\b|\bstop timer\b)
@@ -26,6 +27,8 @@ for category, words in keywords.items():
     words = [rf'\b{word}\b' for word in words]
     pattern = f'(?P<{category}>' + r"|".join(words) + ")"
     pattern_parts.append(pattern)
+
+#TODO: MAKE SURE THAT THE LONGER COMMANDS (STOP THE TIMER) ARE ABOVE SHORTER COMMANDS (STOP -- the music)
 
 combined_pattern = re.compile("|".join(pattern_parts), re.IGNORECASE)
 
@@ -44,9 +47,7 @@ def linker(text: str) -> str:
     
     """
     category = ''
-
     match = combined_pattern.search(text)
-    print(match)
     if match:
         category = match.lastgroup
     else:
