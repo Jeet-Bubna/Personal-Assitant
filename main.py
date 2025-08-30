@@ -8,5 +8,12 @@ def import_modules():
 def main():
     import_modules()
 
+    # Get user input, for now its text
+
+    input = input("Enter command: ")
+
+    
+
+
 if __name__ == "__main__":
     main()
