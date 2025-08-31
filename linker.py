@@ -40,7 +40,7 @@ def linker(text: str) -> str:
     text (str): Takes the string obtained from the TTS as input
 
     Output:
-    Outputs the confirmation string "success" if the text is sent to the concerned program
+    Outputs the category as a success token.
 
     Basically, takes the text, searches for the keywords using regex, and then calls the
     Requried program for the category detected.
