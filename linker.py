@@ -63,3 +63,4 @@ def linker(text: str) -> str:
     
     #print(f"CATEGORY: {category}. Program has been sent to func")
     return category
+
