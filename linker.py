@@ -10,10 +10,17 @@ from sentence_transformers import SentenceTransformer, util
 # respective category, and then returned.
 
 ACCEPTABLE_RATIO = 0.3
+NUM_MODULES = 3
+
 
 model = SentenceTransformer('all-MiniLM-L6-v2')                         # Uses a small lightweight model to reduce strain while loading
 categories = ["music player", "timer"]                                  # Pre-defined categories, and maybe later precalculated vector values
 cat_embeddings = model.encode(categories, normalize_embeddings=True)    # Finds the vector values, normalize_embeddings=True basically makes the length 0, simplifying the calculations from cosine similarities
+
+### For threading
+import threading
+import queue
+broadcasting_queue = [queue.Queue() for i in range(NUM_MODULES)]
 
 def detect_category(text:str) -> str:
     text_embedding = model.encode(text, normalize_embeddings=True)      # Finds the vector values for the text that we have inputed
@@ -24,28 +31,46 @@ def detect_category(text:str) -> str:
         best_idx = scores.argmax().item()
         return categories[best_idx]
 
-def linker(text: str) -> str:
+def linker(main_queue):
+    while True:
+        msg = main_queue.get()
+        print(f"Received message: {msg}")
+        main_queue.task_done()
+
+        category = detect_category(msg)
+        for q in broadcasting_queue:
+            q.put(category)
+        
+
+
+def init_threads(input_thread, main_queue):
     """
-    Links the different programs by calling them.
+    Initialises threads in the main.py file
 
     Args:
-    text (str): Takes the string obtained from the TTS as input
+    input_thread: Is the function which takes input present in the main file
+    main_queue: The main queue defined in the main program
 
-    Output:
-    Outputs the category as a success token.
-
-    Basically, takes the text, searches for the keywords using word embedding, and then calls the
-    Requried program for the category detected.
-    
+    Basically, there are two queues, main queue, and brodcasting queue. the main queue has the text from the orignal input line, 
+    which is entered directly by the user. this infromation is then broadcasted in the broadcasting queue (actually they are multiple 
+    groups of queues which are updated simultaneously, because queues uses FIFO structure, which doenst let more than one functions
+    listen the main queue). So, we communicate via the broadcasting queyes, about the information relating to the category it was sorted 
+    into, and from there, it does its work with text. This allows all functions (music, search, timer, input) work even when something 
+    is pre-occupied.
     """
+    broadcaster_process = threading.Thread(target=linker, daemon=True, args=(main_queue, ))
+    broadcaster_process.start()
 
-    category = detect_category(text)
-    match category:
-        case 'music player':
-            music.music(text)
-        case 'timer':
-            timer.timer(text)
-        case 'search':
-            search.search(text)
-    
-    return category
+    input_process = threading.Thread(target=input_thread, daemon=True)
+    input_process.start()
+
+    music_process = threading.Thread(target=music.music, daemon=True, args=(broadcasting_queue[0],))
+    music_process.start()
+
+    timer_process = threading.Thread(target=timer.timer, daemon=True, args=(broadcasting_queue[1],))
+    timer_process.start()
+
+    search_process = threading.Thread(target=search.search, daemon=True, args=(broadcasting_queue[2],))
+    search_process.start()
+
+    input_process.join() #idk if i need this or not

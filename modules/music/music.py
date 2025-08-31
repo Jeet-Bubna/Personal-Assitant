@@ -1,6 +1,6 @@
-def music(text):
-    import time
-    time.sleep(10)
+def music(queue):
+    text = queue.get()
+    print(f'Text recieveed in music_thread: {text}')
 
 
 """

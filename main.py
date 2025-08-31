@@ -1,10 +1,16 @@
-from linker import linker
+from linker import linker, init_threads
+import queue
+
+main_queue = queue.Queue()
+
+def input_thread():
+    while True:
+        text = input("Enter command: ")
+        main_queue.put(text)
 
 def main():
-    # Get user input, for now its text
-
-    text = input("Enter command: ")
-    linker(text)
+    init_threads(input_thread, main_queue)
+    
 
 if __name__ == "__main__":
     main()
