@@ -84,11 +84,3 @@ def linker():
     search_process.start()
 
     brodcaster(main_queue)
-
-    #input_process.join() 
-
-    # This is important, as we want this function, the init_thread functions to not finish, or else it will return causing the main progam 
-    # to return, and the program will not interate, causing a message 'enter command' and then it will just end. This is because the input 
-    # process is on a daemon thread, which is considered as a 'background' task, and if the non-daemon thread (in this case, the main program) 
-    # thread finishes, it wont wait for the non-daemon threads to finish, causing the program to end abruptly. But, from now on, we make it a 
-    # non-daemon thread, so that it is required and will does not require this mehtod
