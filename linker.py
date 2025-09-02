@@ -7,57 +7,107 @@ from sentence_transformers import SentenceTransformer, util
 
 ACCEPTABLE_RATIO = 0.3
 NUM_MODULES = 3
+categories = {'music': 'music_player', 'timer':'timer', 'search':'search'}                       
+program_map = {'music':music.music, 'timer':timer.timer, 'search':search.search}
 
 # ********************************************************************************* #
 
-# Uses Sentence transformers, a model from hugging face which does embedding detection. This takes 
-# care of all the actual sysnonyms and doesnt need us to have a hardcoded keywords dict. How this 
-# works is basically it creates multi-dimentional vectors, and then compares them to find how alike 
-# they are in dimention, using the cosine similariy fucntion. The highets score is mapped to the 
-# respective category, and then returned. FUN FACT: apprently LLM's also use embeddings to cateogirze
-# tokens lmao.
+"""
+
+THE DIFFERENT DICTS USED
+
+--------------------------------------------------------------------------------------
+categories: {actual name of the category: name we want the embedding system to think}
+program map = {actual name of the category: function assosciated with it}
+-------------------------------------------------------------------------------------
+
+program queue map = {Queue object of the respective program: Program function}
+broadcasting queue = {name of the category:queue object for that category}
+
+"""
 
 
-model = SentenceTransformer('all-MiniLM-L6-v2')                         # Uses a small lightweight model to reduce strain while loading
-categories = ["music player", "timer"]                                  # Pre-defined categories, and maybe later precalculated vector values
-cat_embeddings = model.encode(categories, normalize_embeddings=True)    # Finds the vector values, normalize_embeddings=True basically makes the length 0, simplifying the calculations from cosine similarities
+model = SentenceTransformer('all-MiniLM-L6-v2')                                                         # Uses a small lightweight model to reduce strain while loading
+
+### For embeddings
+category_embeddigns = model.encode([desired_category for _, desired_category in categories.items()], normalize_embeddings=True)    # Finds the vector values, normalize_embeddings=True basically makes the length 0, simplifying the calculations from cosine similarities
 
 ### For threading
 import threading
 import queue
-broadcasting_queue = [queue.Queue() for i in range(NUM_MODULES)]
+
+### Queue management - Broadcast Queue
 main_queue = queue.Queue()
+broadcasting_queue = {}
+for category in categories:
+    broadcasting_queue[category] =  queue.Queue()
+program_queue_map = {broadcasting_queue[category]: program_map[category] for category in categories}
+
 
 def detect_category(text:str) -> str:
-    text_embedding = model.encode(text, normalize_embeddings=True)      # Finds the vector values for the text that we have inputed
-    scores = util.cos_sim(text_embedding, cat_embeddings)[0]            # Calculates the score
+    """
+    Detects the category of the text to determine which module should be activated
+
+    Args:
+    text (str): The text which the user inputs
+
+    Output:
+    str: Outputs the category in general form, ie. 'music' and not 'music-player'
+
+    Uses Sentence transformers, a model from hugging face which does embedding detection. This takes 
+    care of all the actual sysnonyms and doesnt need us to have a hardcoded keywords dict. How this 
+    works is basically it creates multi-dimentional vectors, and then compares them to find how alike 
+    they are in dimention, using the cosine similariy fucntion. The highets score is mapped to the 
+    respective category, and then returned. FUN FACT: apprently LLM's also use embeddings to cateogirze
+    tokens lmao.
+
+    """
+
+    text_embedding = model.encode(text, normalize_embeddings=True)          # Finds the vector values for the text that we have inputed
+    scores = util.cos_sim(text_embedding, category_embeddigns)[0]           # Calculates the score
     if scores.max().item() < ACCEPTABLE_RATIO:                          
         return 'search'
     else:
-        best_idx = scores.argmax().item()                               # NAME CONVENTION: Apparently idx --> index not 'id'
-        return categories[best_idx]
+        best_idx = scores.argmax().item()                          
+        return [key for key,_ in categories.items()][best_idx]
 
 
 def input_thread() -> None:
+    """
+    Input thread where continous input will be taken
+
+    """
     while True:
-        text = input("Enter command: ")
+        text = input("Enter command: ").lower().strip()
         main_queue.put(text)
 
-def brodcaster(main_queue:queue.Queue) -> None:
+def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict) -> None:
+    """
+    Sends the message from the Main Queue to the concerned Module Queue
+
+    Args
+    main_queue: The main queue object
+    broadcasting_queue: The broadcasting queue dict, in the form {name of the category:queue object for that category}
+
+    """
     while True:
         msg = main_queue.get()
         print(f"Received message: {msg}")
         main_queue.task_done()
-
         category = detect_category(msg)
-        match category:
-            case 'music player':
-                broadcasting_queue[0].put(msg)
-            case 'timer':
-                broadcasting_queue[1].put(msg)
-            case 'search':
-                broadcasting_queue[2].put(msg)
+        broadcasting_queue[category].put(msg)
 
+def start_module_threads(program_queue_map:dict) -> None:
+    """
+    Starts the threads of modules using a program_queue_map.
+
+    Args
+    program_queue_map: The program-queue map, in the form {Queue object of the respective program: Program function}
+    
+    """
+    for key, value in program_queue_map.items():
+        _ = threading.Thread(target=value, daemon=True, args=(key,))
+        _.start()
 
 def linker():
     """
@@ -74,13 +124,6 @@ def linker():
     input_process = threading.Thread(target=input_thread, daemon=False)
     input_process.start()
 
-    music_process = threading.Thread(target=music.music, daemon=True, args=(broadcasting_queue[0],))
-    music_process.start()
+    start_module_threads(program_queue_map)
 
-    timer_process = threading.Thread(target=timer.timer, daemon=True, args=(broadcasting_queue[1],))
-    timer_process.start()
-
-    search_process = threading.Thread(target=search.search, daemon=True, args=(broadcasting_queue[2],))
-    search_process.start()
-
-    brodcaster(main_queue)
+    broadcaster(main_queue)
