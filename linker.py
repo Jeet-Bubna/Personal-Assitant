@@ -123,7 +123,7 @@ def linker():
 
     input_process = threading.Thread(target=input_thread, daemon=False)
     input_process.start()
+    broadcaster_thread = threading.Thread(target=broadcaster, daemon=True, args=(main_queue, broadcasting_queue))
+    broadcaster_thread.start()
 
     start_module_threads(program_queue_map)
-
-    broadcaster(main_queue)

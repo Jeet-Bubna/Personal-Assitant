@@ -12,7 +12,6 @@ ydl_opts = {
     }
 
 def music(queue):
-    print('started')
     while True:
         text = queue.get()
         print(f'Text recieveed in music_thread: {text}')
