@@ -7,7 +7,8 @@ from sentence_transformers import SentenceTransformer, util
 # care of all the actual sysnonyms and doesnt need us to have a hardcoded keywords dict. How this 
 # works is basically it creates multi-dimentional vectors, and then compares them to find how alike 
 # they are in dimention, using the cosine similariy fucntion. The highets score is mapped to the 
-# respective category, and then returned.
+# respective category, and then returned. FUN FACT: apprently LLM's also use embeddings to cateogirze
+# tokens lmao.
 
 ACCEPTABLE_RATIO = 0.3
 NUM_MODULES = 3
@@ -28,7 +29,7 @@ def detect_category(text:str) -> str:
     if scores.max().item() < ACCEPTABLE_RATIO:
         return 'search'
     else:
-        best_idx = scores.argmax().item()
+        best_idx = scores.argmax().item()                               # NAME CONVENTION: Apparently idx --> index not 'id'
         return categories[best_idx]
 
 def linker(main_queue):
@@ -38,8 +39,13 @@ def linker(main_queue):
         main_queue.task_done()
 
         category = detect_category(msg)
-        for q in broadcasting_queue:
-            q.put(category)
+        match category:
+            case 'music player':
+                broadcasting_queue[0].put(msg)
+            case 'timer':
+                broadcasting_queue[1].put(msg)
+            case 'search':
+                broadcasting_queue[2].put(msg)
         
 
 
@@ -73,4 +79,9 @@ def init_threads(input_thread, main_queue):
     search_process = threading.Thread(target=search.search, daemon=True, args=(broadcasting_queue[2],))
     search_process.start()
 
-    input_process.join() #idk if i need this or not
+    input_process.join() 
+
+    # This is important, as we want this function, the init_thread functions to not finish, or else it will return causing the main progam 
+    # to return, and the program will not interate, causing a message 'enter command' and then it will just end. This is because the input 
+    # process is on a daemon thread, which is considered as a 'background' task, and if the non-daemon thread (in this case, the main program) 
+    # thread finishes, it wont wait for the non-daemon threads to finish, causing the program to end abruptly.
