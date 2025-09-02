@@ -3,15 +3,19 @@ from modules import timer
 from modules import search
 from sentence_transformers import SentenceTransformer, util
 
+# ********************************************************************************* #
+
+ACCEPTABLE_RATIO = 0.3
+NUM_MODULES = 3
+
+# ********************************************************************************* #
+
 # Uses Sentence transformers, a model from hugging face which does embedding detection. This takes 
 # care of all the actual sysnonyms and doesnt need us to have a hardcoded keywords dict. How this 
 # works is basically it creates multi-dimentional vectors, and then compares them to find how alike 
 # they are in dimention, using the cosine similariy fucntion. The highets score is mapped to the 
 # respective category, and then returned. FUN FACT: apprently LLM's also use embeddings to cateogirze
 # tokens lmao.
-
-ACCEPTABLE_RATIO = 0.3
-NUM_MODULES = 3
 
 
 model = SentenceTransformer('all-MiniLM-L6-v2')                         # Uses a small lightweight model to reduce strain while loading
@@ -27,19 +31,19 @@ main_queue = queue.Queue()
 def detect_category(text:str) -> str:
     text_embedding = model.encode(text, normalize_embeddings=True)      # Finds the vector values for the text that we have inputed
     scores = util.cos_sim(text_embedding, cat_embeddings)[0]            # Calculates the score
-    if scores.max().item() < ACCEPTABLE_RATIO:
+    if scores.max().item() < ACCEPTABLE_RATIO:                          
         return 'search'
     else:
         best_idx = scores.argmax().item()                               # NAME CONVENTION: Apparently idx --> index not 'id'
         return categories[best_idx]
 
 
-def input_thread():
+def input_thread() -> None:
     while True:
         text = input("Enter command: ")
         main_queue.put(text)
 
-def brodcaster(main_queue):
+def brodcaster(main_queue:queue.Queue) -> None:
     while True:
         msg = main_queue.get()
         print(f"Received message: {msg}")
@@ -59,10 +63,6 @@ def linker():
     """
     Initialises threads in the main.py file
 
-    Args:
-    input_thread: Is the function which takes input present in the main file
-    main_queue: The main queue defined in the main program
-
     Basically, there are two queues, main queue, and brodcasting queue. the main queue has the text from the orignal input line, 
     which is entered directly by the user. this infromation is then broadcasted in the broadcasting queue (actually they are multiple 
     groups of queues which are updated simultaneously, because queues uses FIFO structure, which doenst let more than one functions
@@ -70,8 +70,6 @@ def linker():
     into, and from there, it does its work with text. This allows all functions (music, search, timer, input) work even when something 
     is pre-occupied.
     """
-    # broadcaster_process = threading.Thread(target=linker, daemon=True, args=(main_queue, ))
-    # broadcaster_process.start()
 
     input_process = threading.Thread(target=input_thread, daemon=False)
     input_process.start()
@@ -92,4 +90,5 @@ def linker():
     # This is important, as we want this function, the init_thread functions to not finish, or else it will return causing the main progam 
     # to return, and the program will not interate, causing a message 'enter command' and then it will just end. This is because the input 
     # process is on a daemon thread, which is considered as a 'background' task, and if the non-daemon thread (in this case, the main program) 
-    # thread finishes, it wont wait for the non-daemon threads to finish, causing the program to end abruptly.
+    # thread finishes, it wont wait for the non-daemon threads to finish, causing the program to end abruptly. But, from now on, we make it a 
+    # non-daemon thread, so that it is required and will does not require this mehtod
