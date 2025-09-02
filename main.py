@@ -9,7 +9,8 @@ def input_thread():
         main_queue.put(text)
 
 def main():
-    init_threads(input_thread, main_queue)
+    init_threads(input_thread)
+    linker(main_queue)
     
 
 if __name__ == "__main__":

@@ -49,7 +49,7 @@ def linker(main_queue):
         
 
 
-def init_threads(input_thread, main_queue):
+def init_threads(input_thread, main_queue:None):
     """
     Initialises threads in the main.py file
 
@@ -64,10 +64,10 @@ def init_threads(input_thread, main_queue):
     into, and from there, it does its work with text. This allows all functions (music, search, timer, input) work even when something 
     is pre-occupied.
     """
-    broadcaster_process = threading.Thread(target=linker, daemon=True, args=(main_queue, ))
-    broadcaster_process.start()
+    # broadcaster_process = threading.Thread(target=linker, daemon=True, args=(main_queue, ))
+    # broadcaster_process.start()
 
-    input_process = threading.Thread(target=input_thread, daemon=True)
+    input_process = threading.Thread(target=input_thread, daemon=False)
     input_process.start()
 
     music_process = threading.Thread(target=music.music, daemon=True, args=(broadcasting_queue[0],))
@@ -79,7 +79,7 @@ def init_threads(input_thread, main_queue):
     search_process = threading.Thread(target=search.search, daemon=True, args=(broadcasting_queue[2],))
     search_process.start()
 
-    input_process.join() 
+    #input_process.join() 
 
     # This is important, as we want this function, the init_thread functions to not finish, or else it will return causing the main progam 
     # to return, and the program will not interate, causing a message 'enter command' and then it will just end. This is because the input 
