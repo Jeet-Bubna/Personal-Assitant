@@ -36,3 +36,15 @@ Before, i used threading module in my earlier processes. So, i use multiprocessi
 So, i was just experimenting, and i had a line of code which said 'input process.join()'. Naturally, i thought this isnt necessary, as we are not joining other threads right? So i deleted it and found that the entire input system was broken..  
 The reason is simple: the input process thread was a daemon thread. A daemon thread is like a background worker thread, and if the non-daemon threads (ie. the main threads) are finished, the program will finish. What joining means, it doesnt mean that you kill the thread and join it, it means that you halt the execultion of code, wait for the thread to finish, and then you just join the thread with the main program. Now, because the input process is a loop, it never ends, so by mistake, i made a very elegant solution to a trivial problem.  
 But, now the input thread is set to non-daemon because its a reuqired process, and keeping the function runnning, in hindsight, isnt elegant but rather coincidental. So, by making it a non-daemon thread, i was able to refactor the code such that there are no threading related processes in main file, and only present in linker file. Also, made the actual linker fucntion a broadcaster function (by renaming it) such that the file name makes sense. Because before the name change, the main function was `init_threads()` which doesnt make sense for a file called `linker.py`.
+### Removing Hardcoding
+Okay, old code was messy. Music was `broadcasting_queue[0]`, timer `[1]`, search `[2]`, and the broadcaster had a huge match-case. Totally fine for 3 modules, but adding anything new? Nightmare.
+
+So I refactored with **dictionaries**:
+
+- `categories` now maps names to functions
+- `broadcasting_queue` maps categories to queues
+- `program_map` maps categories to module functions
+
+Now, the broadcaster just looks up the **queue from the dictionary** and puts the message there. Linker loops over the dictionaries to start threads.
+
+Honestly, it feels **way cleaner**. Adding a new module = add a key-value pair, and boom—it works everywhere automatically. No hunting for indices, no changing multiple places. Smooth, scalable, and easier to understand. Also, my future self doesn’t have to curse at my past self—small wins, people.
