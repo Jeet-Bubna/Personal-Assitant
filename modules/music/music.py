@@ -12,6 +12,7 @@ ydl_opts = {
     }
 
 def music(queue):
+    print('started')
     while True:
         text = queue.get()
         print(f'Text recieveed in music_thread: {text}')
@@ -99,8 +100,4 @@ thats a no no.
 
 YES! got it to work, using yt-dlp only tho, i cannot find a better way - one thought does come to mind, like we just implement what spotify does and play the song
 WHILE its downloading, so essentially its very very very fast, ill see if i can implement that.
-
-
 """
-    
-
