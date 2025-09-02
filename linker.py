@@ -49,7 +49,7 @@ def linker(main_queue):
         
 
 
-def init_threads(input_thread, main_queue:None):
+def init_threads(input_thread):
     """
     Initialises threads in the main.py file
 

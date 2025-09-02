@@ -1,6 +1,32 @@
+import vlc
+from yt_dlp import YoutubeDL
+import time
+
+# Using yt-dlp to download songs locally and play them using vlc, right now just to prove concept
+# TODO: implement the automatic linker generator and all
+
+ydl_opts = {
+        "format": "bestaudio/best",
+        "quiet": True,
+        "outtmpl": "song.%(ext)s"
+    }
+
 def music(queue):
-    text = queue.get()
-    print(f'Text recieveed in music_thread: {text}')
+    while True:
+        text = queue.get()
+        print(f'Text recieveed in music_thread: {text}')
+        url = "https://www.youtube.com/watch?v=4TVT7IOqH1Y" #for now, for testing purposes
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+        
+        player = vlc.MediaPlayer(filename)
+        player.play()
+        time.sleep(10)
+        player.pause()
+        time.sleep(4)
+        player.play()
+
 
 
 """
@@ -67,6 +93,12 @@ i think about it, as we dont know what to match it to. So, that doesnt work, hmm
 
 While reaserching, i realised that word-embeddings will be a better suit for linker program, as that basically gets rid of the need for keywords entirely. First,
 Imma work on that for now. Now that is done, imma build the music player
+
+Tried to look for new ways, like tried to use spotify's api but that doesnt allow for entire playback, only pausing and resuming, so we cannot play actual songs, 
+thats a no no.
+
+YES! got it to work, using yt-dlp only tho, i cannot find a better way - one thought does come to mind, like we just implement what spotify does and play the song
+WHILE its downloading, so essentially its very very very fast, ill see if i can implement that.
 
 
 """
