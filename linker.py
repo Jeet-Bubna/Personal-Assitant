@@ -22,6 +22,7 @@ cat_embeddings = model.encode(categories, normalize_embeddings=True)    # Finds 
 import threading
 import queue
 broadcasting_queue = [queue.Queue() for i in range(NUM_MODULES)]
+main_queue = queue.Queue()
 
 def detect_category(text:str) -> str:
     text_embedding = model.encode(text, normalize_embeddings=True)      # Finds the vector values for the text that we have inputed
@@ -32,7 +33,13 @@ def detect_category(text:str) -> str:
         best_idx = scores.argmax().item()                               # NAME CONVENTION: Apparently idx --> index not 'id'
         return categories[best_idx]
 
-def linker(main_queue):
+
+def input_thread():
+    while True:
+        text = input("Enter command: ")
+        main_queue.put(text)
+
+def brodcaster(main_queue):
     while True:
         msg = main_queue.get()
         print(f"Received message: {msg}")
@@ -46,10 +53,9 @@ def linker(main_queue):
                 broadcasting_queue[1].put(msg)
             case 'search':
                 broadcasting_queue[2].put(msg)
-        
 
 
-def init_threads(input_thread):
+def linker():
     """
     Initialises threads in the main.py file
 
@@ -78,6 +84,8 @@ def init_threads(input_thread):
 
     search_process = threading.Thread(target=search.search, daemon=True, args=(broadcasting_queue[2],))
     search_process.start()
+
+    brodcaster(main_queue)
 
     #input_process.join() 
 
