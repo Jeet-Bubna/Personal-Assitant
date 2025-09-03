@@ -12,9 +12,16 @@ ydl_opts = {
     }
 
 def music(queue):
+
+    print('MUSIC THREAD: STARTED')
+
     while True:
         text = queue.get()
-        print(f'Text recieveed in music_thread: {text}')
+        print(f'Text recieved in music_thread: {text}')
+        if text == 'TERMINATE':
+            break
+
+        
         url = "https://www.youtube.com/watch?v=4TVT7IOqH1Y" #for now, for testing purposes
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
