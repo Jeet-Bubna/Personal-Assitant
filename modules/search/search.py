@@ -1,6 +1,6 @@
-def search(queue):
+def search(queue, y):
     while True:
         text = queue.get()
-        if text == 'TERMINATE':
-            print('Terminating')
+        if text == 'end':
+            y.put('TERMINATED')
             break

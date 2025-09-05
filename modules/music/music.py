@@ -1,6 +1,15 @@
 import vlc
 from yt_dlp import YoutubeDL
 import time
+import queue
+
+import logging
+logging.basicConfig(filename="logfile.log",
+                    format='%(asctime)s %(message)s',
+                    filemode='w')
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 # Using yt-dlp to download songs locally and play them using vlc, right now just to prove concept
 # TODO: implement the automatic linker generator and all
@@ -11,28 +20,43 @@ ydl_opts = {
         "outtmpl": "song.%(ext)s"
     }
 
-def music(queue):
 
-    print('MUSIC THREAD: STARTED')
+player = vlc.MediaPlayer('sunflower.webm')
 
+def play_music(url:str, filename:str) -> None:
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
+    
+    player.play()
+    time.sleep(10)
+    player.pause()
+    time.sleep(4)
+    player.play()
+
+def music(brod_queue:queue.Queue, out_queue:queue.Queue):
     while True:
-        text = queue.get()
+        text = brod_queue.get()
+        logger.info(f'Text recieved in music_thread: {text}')
         print(f'Text recieved in music_thread: {text}')
-        if text == 'TERMINATE':
+        state = player.get_state()
+        if text == 'end':
+            logger.info('Music temrinating')
+            if state == vlc.State.Paused:
+                player.stop()
+            out_queue.put('TERMINATED')
+            logger.info('Queue message for terminate in music succeeded')
             break
+        if state != vlc.State.Playing:
+            play_music('https://www.youtube.com/watch?v=cKMQz1Rf2ow&list=RDcKMQz1Rf2ow&start_radio=1','sunflower.webm')
+        
 
         
-        url = "https://www.youtube.com/watch?v=4TVT7IOqH1Y" #for now, for testing purposes
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
         
-        player = vlc.MediaPlayer(filename)
-        player.play()
-        time.sleep(10)
-        player.pause()
-        time.sleep(4)
-        player.play()
+        
+
+        
+
 
 
 

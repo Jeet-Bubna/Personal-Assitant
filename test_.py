@@ -3,8 +3,6 @@ from unittest.mock import patch
 from linker import linker
 import queue
 import threading
-
-# Import your code (assuming it's in linker.py)
 import linker
 
 

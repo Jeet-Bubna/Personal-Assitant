@@ -11,6 +11,11 @@ logging.basicConfig(filename="logfile.log",
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
+import tqdm
+tqdm.tqdm.disable = True
+
+
+
 # ********************************************************************************* #
 
 ACCEPTABLE_RATIO = 0.3
@@ -34,7 +39,7 @@ categories: {actual name of the category: name we want the embedding system to t
 program map = {actual name of the category: function assosciated with it}
 -------------------------------------------------------------------------------------
 
-program_queue_map = {Queue object of the respective program: Program function}
+outgoing_queue_program_map = {Queue object of the respective program: Program function}
 broadcasting queue = {name of the category: queue object for that category}
 category_thread_map = {name of the cateogry: thread object for that category}
 
@@ -51,12 +56,14 @@ import threading
 import queue
 
 ### Queue management - Broadcast Queue
+
 main_queue = queue.Queue()
 broadcasting_queue = {}
 for category in categories:
-    broadcasting_queue[category] =  queue.Queue()
+    broadcasting_queue[category] =  {'out_queue':queue.Queue(), 'incoming_queue':queue.Queue()}
 
-program_queue_map = {broadcasting_queue[category]: program_map[category] for category in categories}
+outgoing_queue_program_map = {broadcasting_queue[category]['out_queue']: program_map[category] for category in categories}
+incoming_queue_program_map = {broadcasting_queue[category]['incoming_queue']: program_map[category] for category in categories}
 
 def detect_category(text:str) -> str:
     """
@@ -108,7 +115,7 @@ def input_thread() -> None:
         except Exception:
             logger.error('Input Error, please try again')
 
-def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, queue.Queue]) -> None:
+def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, dict[str,queue.Queue]]) -> None:
     """
     Sends the message from the Main Queue to the concerned Module Queue
 
@@ -126,49 +133,65 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, queue.Queue
 
             #Checks if program needs to end, if so, sends a termination message to all queues.
             if category == KEYWORD_END:
-                programs_terminated = []    
+                programs_terminated = []
                 for program,queue in broadcasting_queue.items():
-                    queue.put('TERMINATE')
+                    queue['out_queue'].put(KEYWORD_END)
                 
-                for prog, thread in category_thread_map.items():    # Looks up the thread in a map to check if the thread is alive
-                    thread.join(timeout=CLEANUP_TIME)               # Allows the threads to cleanup the ongoing processes for some time
-                    if not thread.is_alive():
-                        logger.info(f"{prog} has been terminated")
-                        programs_terminated.append(prog)
-                    else:
-                        logger.error(f"{prog} termination failed")
+                for program, queue in broadcasting_queue.items():
+                    logger.info('%s termination process initiated', program)
+                    if program == 'end':
+                        programs_terminated.append(program)
+                        logger.info('%s has been terminated', program)
+                    try:
+                        message = queue['incoming_queue'].get(timeout=2)
+                        logger.debug("Queue size for %s before get: %s", program, queue['incoming_queue'].qsize())
+                        logger.debug('%s message has been recieved from module', message)
+                        if message == 'TERMINATED':
+                            programs_terminated.append(program)
+                            logger.info('%s has been terminated', program)
+                    except Exception:
+                        logger.error(f"{program_map} termination failed", exc_info=True)
                 
-                # Checks if all programs have ended, uses program map as categories may have certain categories which 
-                # dont direcly relate to programs (eg. end)
-                if len(programs_terminated) == len(program_map):
-                    logger.info('All programs terminated successfully')
-                    break
+                # print(f"programs temrinated: {programs_terminated}, {len(programs_terminated)} program map: {len(program_map)}")
+                # if len(programs_terminated) == len(program_map):
+                #     logger.info('All programs terminated successfully')
+                #     break
+
+                real_programs = {k: v for k, v in program_map.items() if v is not None}
+                if len(programs_terminated)-1 == len(real_programs):
+                    logger.info("All programs terminated successfully")
+
             else:
-                broadcasting_queue[category].put(msg['text'])
+                broadcasting_queue[category]['out_queue'].put(msg['text'])
         except Exception as e:
             logger.critical(f'{e} ocurred in broadcasting thread')
 
-def start_module_threads(program_queue_map:dict) -> dict[str, threading.Thread] | None:
+
+def start_module_threads(outgoing_queue_program_map:dict, incoming_queue_program_map:dict) -> dict[str, threading.Thread] | None:
     """
-    Starts the threads of modules using a program_queue_map.
+    Starts the threads of modules using a outgoing_queue_program_map.
 
     Args
-    program_queue_map: The program-queue map, in the form {Queue object of the respective program: Program function}
+    outgoing_queue_program_map: The program-queue map, in the form {Queue object of the respective program: Program function}
 
     Output
     Program thread map (dict): Returns a dict with the program and their respective threads
     
     """
     try:
+        # VERY VERY JUNKY LOGIC, FIX PLEASE LATER
         program_thread_map = {}
-        program_map_with_key_programfunction = {program_function:category_name for category_name, program_function in program_map.items()}
-        for queue, program in program_queue_map.items():
-            program_thread = threading.Thread(target=program, daemon=True, args=(queue,))
+        function_category_map = {program_function:category_name for category_name, program_function in program_map.items()}
+        for queue, program in outgoing_queue_program_map.items():
+            outgoing_queue = queue
+            reversed_incoming_queue_map = {program: queue for queue, program in incoming_queue_program_map.items()}
+            incoming_queue = reversed_incoming_queue_map[program]
+            program_thread = threading.Thread(target=program, daemon=True, args=(outgoing_queue, incoming_queue))
             program_thread.start()
-            program_thread_map[program_map_with_key_programfunction[program]] = program_thread
+            program_thread_map[function_category_map[program]] = program_thread
         return program_thread_map
     except Exception as e:
-        logger.critical(f"{e} occured in start module thread")
+        logger.critical("occured in start module thread", exc_info=True)
         return None
 
 
@@ -192,7 +215,7 @@ def linker() -> None:
         input_process.start()
         
         global program_thread_map, category_thread_map
-        program_thread_map = start_module_threads(program_queue_map)
+        program_thread_map = start_module_threads(outgoing_queue_program_map, incoming_queue_program_map)
         if program_thread_map != None:
             category_thread_map = {category:program_thread_map[category] for category in categories}
     except Exception as e:

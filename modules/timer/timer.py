@@ -1,6 +1,6 @@
-def timer(queue):
+def timer(queue, y):
     while True:
         text = queue.get()
-        if text == 'TERMINATE':
-            print('Terminating')
+        if text == 'end':
+            y.put('TERMINATED')
             break
