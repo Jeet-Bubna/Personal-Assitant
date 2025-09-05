@@ -3,6 +3,14 @@ from modules import timer
 from modules import search
 from sentence_transformers import SentenceTransformer, util
 
+import logging
+logging.basicConfig(filename="newfile.log",
+                    format='%(asctime)s %(message)s',
+                    filemode='w')
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
 # ********************************************************************************* #
 
 ACCEPTABLE_RATIO = 0.3
@@ -77,8 +85,8 @@ def detect_category(text:str) -> str:
             best_idx = scores.argmax().item()                          
             return [key for key,_ in categories.items()][best_idx]
     except Exception as e:
-        print(f"{e} occured in detect_category")
-        return ''
+        logger.critical(f"{e} occured in detect_category")
+        return KEYWORD_UNK
 
 
 def input_thread() -> None:
@@ -95,10 +103,10 @@ def input_thread() -> None:
                 main_queue.put({'category':category, 'text':text})
 
             if category == KEYWORD_END:
-                print('PROGRAM TERMINATING: Input thread termintated')
+                logger.info('PROGRAM TERMINATING: Input thread termintated')
                 break
         except Exception:
-            print('Input Error, please try again')
+            logger.error('Input Error, please try again')
 
 def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, queue.Queue]) -> None:
     """
@@ -112,7 +120,7 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, queue.Queue
     while True:
         try:
             msg = main_queue.get()
-            print(f"Received message: {msg}")
+            logger.info(f"Received message: {msg}")
             main_queue.task_done()
             category = msg['category']
 
@@ -125,20 +133,20 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, queue.Queue
                 for prog, thread in category_thread_map.items():    # Looks up the thread in a map to check if the thread is alive
                     thread.join(timeout=CLEANUP_TIME)               # Allows the threads to cleanup the ongoing processes for some time
                     if not thread.is_alive():
-                        print(f"{prog} has been terminated")
+                        logger.info(f"{prog} has been terminated")
                         programs_terminated.append(prog)
                     else:
-                        print(f"{prog} termination failed")
+                        logger.error(f"{prog} termination failed")
                 
                 # Checks if all programs have ended, uses program map as categories may have certain categories which 
                 # dont direcly relate to programs (eg. end)
                 if len(programs_terminated) == len(program_map):
-                    print('All programs terminated successfully')
+                    logger.info('All programs terminated successfully')
                     break
             else:
                 broadcasting_queue[category].put(msg['text'])
         except Exception as e:
-            print(f'{e} ocurred in broadcasting thread')
+            logger.critical(f'{e} ocurred in broadcasting thread')
 
 def start_module_threads(program_queue_map:dict) -> dict[str, threading.Thread] | None:
     """
@@ -160,7 +168,7 @@ def start_module_threads(program_queue_map:dict) -> dict[str, threading.Thread] 
             program_thread_map[program_map_with_key_programfunction[program]] = program_thread
         return program_thread_map
     except Exception as e:
-        print(f"{e} occured in start module thread")
+        logger.critical(f"{e} occured in start module thread")
         return None
 
 
@@ -188,4 +196,4 @@ def linker() -> None:
         if program_thread_map != None:
             category_thread_map = {category:program_thread_map[category] for category in categories}
     except Exception as e:
-        print(f"{e} occured in Linker")
+        logger.critical(f"{e} occured in Linker")
