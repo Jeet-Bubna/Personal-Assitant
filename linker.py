@@ -4,7 +4,7 @@ from modules import search
 from sentence_transformers import SentenceTransformer, util
 
 import logging
-logging.basicConfig(filename="newfile.log",
+logging.basicConfig(filename="logfile.log",
                     format='%(asctime)s %(message)s',
                     filemode='w')
 
