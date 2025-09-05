@@ -87,7 +87,7 @@ def input_thread(broadcaster_thread:threading.Thread) -> None:
             print('Input Error, please try again')
     print('program is terminating')
 
-def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str:queue.Queue]) -> None:
+def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, queue.Queue]) -> None:
     """
     Sends the message from the Main Queue to the concerned Module Queue
 
@@ -124,7 +124,7 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str:queue.Queue]
         else:
             broadcasting_queue[category].put(msg)
 
-def start_module_threads(program_queue_map:dict) -> dict:
+def start_module_threads(program_queue_map:dict) -> dict[str, threading.Thread]:
     """
     Starts the threads of modules using a program_queue_map.
 
@@ -146,7 +146,7 @@ def start_module_threads(program_queue_map:dict) -> dict:
     return program_thread_map
 
 
-def linker():
+def linker() -> None:
     """
     Initialises threads in the main.py file
 
