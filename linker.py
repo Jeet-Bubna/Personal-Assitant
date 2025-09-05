@@ -8,7 +8,11 @@ from sentence_transformers import SentenceTransformer, util
 ACCEPTABLE_RATIO = 0.3
 NUM_MODULES = 3
 CLEANUP_TIME = 2
-categories = {'music': 'music player', 'timer':'timer', 'search':'search', 'end':'terminate the program'}                       
+
+KEYWORD_END = "end"
+KEYWORD_UNK = 'unkown'
+
+categories = {'music': 'music player', 'timer':'timer', 'search':'search engine for a question', KEYWORD_END:'terminate the program'}                       
 program_map = {'music':music.music, 'timer':timer.timer, 'search':search.search, 'end':None}
 
 # ********************************************************************************* #
@@ -64,28 +68,37 @@ def detect_category(text:str) -> str:
     tokens lmao.
 
     """
+    try:
+        text_embedding = model.encode(text, normalize_embeddings=True)          # Finds the vector values for the text that we have inputed
+        scores = util.cos_sim(text_embedding, category_embeddigns)[0]           # Calculates the score
+        if scores.max().item() < ACCEPTABLE_RATIO:                          
+            return KEYWORD_UNK
+        else:
+            best_idx = scores.argmax().item()                          
+            return [key for key,_ in categories.items()][best_idx]
+    except Exception as e:
+        print(f"{e} occured in detect_category")
+        return ''
 
-    text_embedding = model.encode(text, normalize_embeddings=True)          # Finds the vector values for the text that we have inputed
-    scores = util.cos_sim(text_embedding, category_embeddigns)[0]           # Calculates the score
-    if scores.max().item() < ACCEPTABLE_RATIO:                          
-        return 'search'
-    else:
-        best_idx = scores.argmax().item()                          
-        return [key for key,_ in categories.items()][best_idx]
 
-
-def input_thread(broadcaster_thread:threading.Thread) -> None:
+def input_thread() -> None:
     """
     Input thread where continous input will be taken
 
     """
-    while broadcaster_thread.is_alive():
+    while True:
         try:
             text = input("Enter command: ").lower().strip() 
-            main_queue.put(text)
+            category = detect_category(text)
+
+            if category != KEYWORD_UNK:
+                main_queue.put({'category':category, 'text':text})
+
+            if category == KEYWORD_END:
+                print('PROGRAM TERMINATING: Input thread termintated')
+                break
         except Exception:
             print('Input Error, please try again')
-    print('program is terminating')
 
 def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, queue.Queue]) -> None:
     """
@@ -97,34 +110,37 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, queue.Queue
 
     """
     while True:
-        msg = main_queue.get()
-        print(f"Received message: {msg}")
-        main_queue.task_done()
-        category = detect_category(msg)
+        try:
+            msg = main_queue.get()
+            print(f"Received message: {msg}")
+            main_queue.task_done()
+            category = msg['category']
 
-        #Checks if program needs to end, if so, sends a termination message to all queues.
-        if category == 'end':
-            programs_terminated = []    
-            for program,queue in broadcasting_queue.items():
-                queue.put('TERMINATE')
-            
-            for prog, thread in category_thread_map.items():    # Looks up the thread in a map to check if the thread is alive
-                thread.join(timeout=CLEANUP_TIME)               # Allows the threads to cleanup the ongoing processes for some time
-                if not thread.is_alive():
-                    print(f"{prog} has been terminated")
-                    programs_terminated.append(prog)
-                else:
-                    print(f"{prog} termination failed")
-            
-            # Checks if all programs have ended, uses program map as categories may have certain categories which 
-            # dont direcly relate to programs (eg. end)
-            if len(programs_terminated) == len(program_map):
-                print('All programs terminated successfully')
-                break
-        else:
-            broadcasting_queue[category].put(msg)
+            #Checks if program needs to end, if so, sends a termination message to all queues.
+            if category == KEYWORD_END:
+                programs_terminated = []    
+                for program,queue in broadcasting_queue.items():
+                    queue.put('TERMINATE')
+                
+                for prog, thread in category_thread_map.items():    # Looks up the thread in a map to check if the thread is alive
+                    thread.join(timeout=CLEANUP_TIME)               # Allows the threads to cleanup the ongoing processes for some time
+                    if not thread.is_alive():
+                        print(f"{prog} has been terminated")
+                        programs_terminated.append(prog)
+                    else:
+                        print(f"{prog} termination failed")
+                
+                # Checks if all programs have ended, uses program map as categories may have certain categories which 
+                # dont direcly relate to programs (eg. end)
+                if len(programs_terminated) == len(program_map):
+                    print('All programs terminated successfully')
+                    break
+            else:
+                broadcasting_queue[category].put(msg['text'])
+        except Exception as e:
+            print(f'{e} ocurred in broadcasting thread')
 
-def start_module_threads(program_queue_map:dict) -> dict[str, threading.Thread]:
+def start_module_threads(program_queue_map:dict) -> dict[str, threading.Thread] | None:
     """
     Starts the threads of modules using a program_queue_map.
 
@@ -135,15 +151,17 @@ def start_module_threads(program_queue_map:dict) -> dict[str, threading.Thread]:
     Program thread map (dict): Returns a dict with the program and their respective threads
     
     """
-
-    program_thread_map = {}
-    program_map_with_key_programfunction = {program_function:category_name for category_name, program_function in program_map.items()}
-    print(program_map_with_key_programfunction)
-    for queue, program in program_queue_map.items():
-        _ = threading.Thread(target=program, daemon=True, args=(queue,))
-        _.start()
-        program_thread_map[program_map_with_key_programfunction[program]] = _
-    return program_thread_map
+    try:
+        program_thread_map = {}
+        program_map_with_key_programfunction = {program_function:category_name for category_name, program_function in program_map.items()}
+        for queue, program in program_queue_map.items():
+            program_thread = threading.Thread(target=program, daemon=True, args=(queue,))
+            program_thread.start()
+            program_thread_map[program_map_with_key_programfunction[program]] = program_thread
+        return program_thread_map
+    except Exception as e:
+        print(f"{e} occured in start module thread")
+        return None
 
 
 def linker() -> None:
@@ -157,13 +175,17 @@ def linker() -> None:
     into, and from there, it does its work with text. This allows all functions (music, search, timer, input) work even when something 
     is pre-occupied.
     """
-
-    broadcaster_thread = threading.Thread(target=broadcaster, daemon=True, args=(main_queue, broadcasting_queue))
-    input_process = threading.Thread(target=input_thread, daemon=False, args=(broadcaster_thread, ))
-
-    broadcaster_thread.start()              # this has to start before, because input process checks this thread is running or not to determine if the program should be terminated
-    input_process.start()
     
-    global program_thread_map, category_thread_map
-    program_thread_map = start_module_threads(program_queue_map)
-    category_thread_map = {category:program_thread_map[category] for category in categories}
+    try:
+        broadcaster_thread = threading.Thread(target=broadcaster, daemon=True, args=(main_queue, broadcasting_queue))
+        input_process = threading.Thread(target=input_thread, daemon=False)
+
+        broadcaster_thread.start()
+        input_process.start()
+        
+        global program_thread_map, category_thread_map
+        program_thread_map = start_module_threads(program_queue_map)
+        if program_thread_map != None:
+            category_thread_map = {category:program_thread_map[category] for category in categories}
+    except Exception as e:
+        print(f"{e} occured in Linker")
