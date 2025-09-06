@@ -11,9 +11,6 @@ logging.basicConfig(filename="logfile.log",
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
-import tqdm
-tqdm.tqdm.disable = True
-
 
 
 # ********************************************************************************* #
@@ -151,11 +148,6 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str, dict[str,qu
                             logger.info('%s has been terminated', program)
                     except Exception:
                         logger.error(f"{program_map} termination failed", exc_info=True)
-                
-                # print(f"programs temrinated: {programs_terminated}, {len(programs_terminated)} program map: {len(program_map)}")
-                # if len(programs_terminated) == len(program_map):
-                #     logger.info('All programs terminated successfully')
-                #     break
 
                 real_programs = {k: v for k, v in program_map.items() if v is not None}
                 if len(programs_terminated)-1 == len(real_programs):
@@ -179,7 +171,6 @@ def start_module_threads(outgoing_queue_program_map:dict, incoming_queue_program
     
     """
     try:
-        # VERY VERY JUNKY LOGIC, FIX PLEASE LATER
         program_thread_map = {}
         function_category_map = {program_function:category_name for category_name, program_function in program_map.items()}
         for queue, program in outgoing_queue_program_map.items():

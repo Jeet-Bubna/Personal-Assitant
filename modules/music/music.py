@@ -1,6 +1,5 @@
 import vlc
 from yt_dlp import YoutubeDL
-import time
 import queue
 
 import logging
@@ -17,38 +16,42 @@ logger.setLevel(logging.DEBUG)
 ydl_opts = {
         "format": "bestaudio/best",
         "quiet": True,
-        "outtmpl": "song.%(ext)s"
+        "outtmpl": "sunflower.%(ext)s"
     }
 
 
-player = vlc.MediaPlayer('sunflower.webm')
 
-def play_music(url:str, filename:str) -> None:
+def play_music(url:str) -> None:
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
-    
+    player = vlc.MediaPlayer(filename)
     player.play()
-    time.sleep(10)
-    player.pause()
-    time.sleep(4)
-    player.play()
+    return player
 
 def music(brod_queue:queue.Queue, out_queue:queue.Queue):
+    player = None
     while True:
-        text = brod_queue.get()
-        logger.info(f'Text recieved in music_thread: {text}')
-        print(f'Text recieved in music_thread: {text}')
-        state = player.get_state()
-        if text == 'end':
-            logger.info('Music temrinating')
-            if state == vlc.State.Paused:
-                player.stop()
-            out_queue.put('TERMINATED')
-            logger.info('Queue message for terminate in music succeeded')
-            break
-        if state != vlc.State.Playing:
-            play_music('https://www.youtube.com/watch?v=cKMQz1Rf2ow&list=RDcKMQz1Rf2ow&start_radio=1','sunflower.webm')
+        try:
+            text = brod_queue.get()
+            logger.info(f'Text recieved in music_thread: {text}')
+            if text == 'end':
+                logger.info('Music temrinating')
+                if player is not None:
+                    state = player.get_state()
+                    if state == vlc.State.Paused or state == vlc.State.Playing:
+                        logger.info('Music was playing, stopping the music')
+                        player.stop()
+                out_queue.put('TERMINATED')
+                logger.info('Queue message for terminate in music succeeded')
+                break
+            if not player or player.get_state() != vlc.State.Playing:
+                logger.debug('Playing music')
+                player = play_music(
+                    'https://www.youtube.com/watch?v=cKMQz1Rf2ow'  
+                )   
+        except Exception:
+            logger.debug('Exception occurred in music', exc_info=True)
         
 
         
