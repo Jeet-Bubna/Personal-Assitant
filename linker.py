@@ -7,7 +7,7 @@ from sentence_transformers import SentenceTransformer, util
 
 ACCEPTABLE_RATIO = 0.3
 NUM_MODULES = 3
-categories = {'music': 'music_player', 'timer':'timer', 'search':'search'}                       
+categories = {'music': 'music player', 'timer':'timer', 'search':'search', 'end':'end the program'}                       
 program_map = {'music':music.music, 'timer':timer.timer, 'search':search.search}
 
 # ********************************************************************************* #
@@ -29,6 +29,13 @@ broadcasting queue = {name of the category:queue object for that category}
 
 model = SentenceTransformer('all-MiniLM-L6-v2')                                                         # Uses a small lightweight model to reduce strain while loading
 
+## For removing end form cateogries
+import copy
+real_categories = copy.deepcopy(categories)
+real_categories.pop('end')
+print('cat', categories, 'real cat', real_categories)
+
+
 ### For embeddings
 category_embeddigns = model.encode([desired_category for _, desired_category in categories.items()], normalize_embeddings=True)    # Finds the vector values, normalize_embeddings=True basically makes the length 0, simplifying the calculations from cosine similarities
 
@@ -39,9 +46,9 @@ import queue
 ### Queue management - Broadcast Queue
 main_queue = queue.Queue()
 broadcasting_queue = {}
-for category in categories:
+for category in real_categories:
     broadcasting_queue[category] =  queue.Queue()
-program_queue_map = {broadcasting_queue[category]: program_map[category] for category in categories}
+program_queue_map = {broadcasting_queue[category]: program_map[category] for category in real_categories}
 
 
 def detect_category(text:str) -> str:
@@ -66,9 +73,11 @@ def detect_category(text:str) -> str:
     text_embedding = model.encode(text, normalize_embeddings=True)          # Finds the vector values for the text that we have inputed
     scores = util.cos_sim(text_embedding, category_embeddigns)[0]           # Calculates the score
     if scores.max().item() < ACCEPTABLE_RATIO:                          
-        return 'search'
+        return 'unknown'
     else:
-        best_idx = scores.argmax().item()                          
+        best_idx = scores.argmax().item()
+        print('best idx', best_idx)            
+        print(categories)              
         return [key for key,_ in categories.items()][best_idx]
 
 
@@ -79,9 +88,14 @@ def input_thread() -> None:
     """
     while True:
         text = input("Enter command: ").lower().strip()
-        main_queue.put(text)
+        category = detect_category(text)
+        main_queue.put(category)
 
-def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict) -> None:
+        if category == 'end':
+            print('Terminating program')
+            break
+
+def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str,queue.Queue]) -> None:
     """
     Sends the message from the Main Queue to the concerned Module Queue
 
@@ -91,11 +105,20 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict) -> None:
 
     """
     while True:
-        msg = main_queue.get()
-        print(f"Received message: {msg}")
+        category = main_queue.get()
+        print(f"Received message: {category}")
         main_queue.task_done()
-        category = detect_category(msg)
-        broadcasting_queue[category].put(msg)
+
+        if category == 'end':
+            for _,q in broadcasting_queue.items():
+                q.put(category)
+            print('terminating broadcaster')
+            break
+
+        if category != 'unknown':
+            broadcasting_queue[category].put(category)
+
+        
 
 def start_module_threads(program_queue_map:dict) -> list[threading.Thread]:
     """
@@ -106,8 +129,8 @@ def start_module_threads(program_queue_map:dict) -> list[threading.Thread]:
     
     """
     threads = []
-    for key, value in program_queue_map.items():
-        thread = threading.Thread(target=value, daemon=True, args=(key,))
+    for queue, program in program_queue_map.items():
+        thread = threading.Thread(target=program, daemon=True, args=(queue,))
         thread.start()
         threads.append(thread)
     return threads
@@ -128,10 +151,16 @@ def linker():
     input_process.start()
     broadcaster_thread = threading.Thread(target=broadcaster, daemon=True, args=(main_queue, broadcasting_queue))
     broadcaster_thread.start()
+    threads = start_module_threads(program_queue_map)
 
     input_process.join()
+    print('input joined')
     broadcaster_thread.join()
+    print('broadcaster joined')
 
-    threads = start_module_threads(program_queue_map)
     for thread in threads:
+        print(f"joining", thread)
         thread.join()
+        print(f"{thread} joined")
+    
+    print('Program successfully terinated')
