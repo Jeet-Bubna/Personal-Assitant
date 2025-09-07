@@ -7,10 +7,15 @@ from sentence_transformers import SentenceTransformer, util
 
 ACCEPTABLE_RATIO = 0.3
 NUM_MODULES = 3
-categories = {'music': 'music_player', 'timer':'timer', 'search':'search'}                       
+TIMEOUT_TIME = 4
+categories = {'music': 'music player', 'timer':'timer', 'search':'search', 'end':'end the program'}                       
 program_map = {'music':music.music, 'timer':timer.timer, 'search':search.search}
 
 # ********************************************************************************* #
+
+import logging
+logger = logging.getLogger("main.linker")
+logger.setLevel(logging.INFO)
 
 """
 
@@ -29,6 +34,12 @@ broadcasting queue = {name of the category:queue object for that category}
 
 model = SentenceTransformer('all-MiniLM-L6-v2')                                                         # Uses a small lightweight model to reduce strain while loading
 
+## For removing end form cateogries
+import copy
+real_categories = copy.deepcopy(categories)
+real_categories.pop('end')
+
+
 ### For embeddings
 category_embeddigns = model.encode([desired_category for _, desired_category in categories.items()], normalize_embeddings=True)    # Finds the vector values, normalize_embeddings=True basically makes the length 0, simplifying the calculations from cosine similarities
 
@@ -39,9 +50,9 @@ import queue
 ### Queue management - Broadcast Queue
 main_queue = queue.Queue()
 broadcasting_queue = {}
-for category in categories:
+for category in real_categories:
     broadcasting_queue[category] =  queue.Queue()
-program_queue_map = {broadcasting_queue[category]: program_map[category] for category in categories}
+program_queue_map = {broadcasting_queue[category]: program_map[category] for category in real_categories}
 
 
 def detect_category(text:str) -> str:
@@ -62,14 +73,16 @@ def detect_category(text:str) -> str:
     tokens lmao.
 
     """
-
-    text_embedding = model.encode(text, normalize_embeddings=True)          # Finds the vector values for the text that we have inputed
-    scores = util.cos_sim(text_embedding, category_embeddigns)[0]           # Calculates the score
-    if scores.max().item() < ACCEPTABLE_RATIO:                          
-        return 'search'
-    else:
-        best_idx = scores.argmax().item()                          
-        return [key for key,_ in categories.items()][best_idx]
+    try:
+        text_embedding = model.encode(text, normalize_embeddings=True)          # Finds the vector values for the text that we have inputed
+        scores = util.cos_sim(text_embedding, category_embeddigns)[0]           # Calculates the score
+        if scores.max().item() < ACCEPTABLE_RATIO:                          
+            return 'unknown'
+        else:
+            best_idx = scores.argmax().item()      
+            return [key for key,_ in categories.items()][best_idx]
+    except KeyError:
+        logger.critical('Detect Category failed - key error', exc_info=True)
 
 
 def input_thread() -> None:
@@ -78,10 +91,18 @@ def input_thread() -> None:
 
     """
     while True:
-        text = input("Enter command: ").lower().strip()
-        main_queue.put(text)
+        try:
+            text = input("Enter command: ").lower().strip()
+            category = detect_category(text)
+            main_queue.put(category)
 
-def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict) -> None:
+            if category == 'end':
+                logger.info('Terminating program')
+                break
+        except KeyboardInterrupt:
+            logger.debug('Keyboard interupted')
+
+def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str,queue.Queue]) -> None:
     """
     Sends the message from the Main Queue to the concerned Module Queue
 
@@ -91,13 +112,25 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict) -> None:
 
     """
     while True:
-        msg = main_queue.get()
-        print(f"Received message: {msg}")
-        main_queue.task_done()
-        category = detect_category(msg)
-        broadcasting_queue[category].put(msg)
+        category = main_queue.get()
+        try:
+            logger.debug(f"Received message: {category}")
+            main_queue.task_done()
 
-def start_module_threads(program_queue_map:dict) -> None:
+            if category == 'end':
+                for _,q in broadcasting_queue.items():
+                    q.put(category)
+                logger.info('terminating broadcaster')
+                break
+
+            if category != 'unknown':
+                broadcasting_queue[category].put(category)
+        except Exception:
+            logger.critical('Unexpected error occured in broadcaster', exc_info=True)
+
+        
+
+def start_module_threads(program_queue_map:dict) -> list[threading.Thread]:
     """
     Starts the threads of modules using a program_queue_map.
 
@@ -105,9 +138,15 @@ def start_module_threads(program_queue_map:dict) -> None:
     program_queue_map: The program-queue map, in the form {Queue object of the respective program: Program function}
     
     """
-    for key, value in program_queue_map.items():
-        _ = threading.Thread(target=value, daemon=True, args=(key,))
-        _.start()
+    threads = []
+    try:
+        for queue, program in program_queue_map.items():
+            thread = threading.Thread(target=program, daemon=True, args=(queue,))
+            thread.start()
+            threads.append(thread)
+        return threads
+    except RuntimeError:
+        logger.critical('THREAD CREATION FAILED', exc_info=True)
 
 def linker():
     """
@@ -120,10 +159,34 @@ def linker():
     into, and from there, it does its work with text. This allows all functions (music, search, timer, input) work even when something 
     is pre-occupied.
     """
+    try:
+        input_process = threading.Thread(target=input_thread, daemon=False)
+        input_process.start()
+        broadcaster_thread = threading.Thread(target=broadcaster, args=(main_queue, broadcasting_queue))
+        broadcaster_thread.start()
+        threads = start_module_threads(program_queue_map)
 
-    input_process = threading.Thread(target=input_thread, daemon=False)
-    input_process.start()
-    broadcaster_thread = threading.Thread(target=broadcaster, daemon=True, args=(main_queue, broadcasting_queue))
-    broadcaster_thread.start()
+    except RuntimeError:
+        logger.critical('Key threads failed to be created, TERMINATING', exc_info=True)
+        return
 
-    start_module_threads(program_queue_map)
+    try:
+        input_process.join(timeout=TIMEOUT_TIME)
+        logger.info('input joined')
+        broadcaster_thread.join(timeout=TIMEOUT_TIME)
+        logger.info('broadcaster joined')
+
+        for thread in threads:
+            logger.info(f"joining", thread)
+            thread.join(timeout=TIMEOUT_TIME)
+            if thread.is_alive() == False:
+                logger.info(f"{thread} joined")
+            else:
+                logger.critical(f'{thread} failed to join')
+                # impement a kill switch
+                break
+
+        logger.info('Program successfully terinated')
+        return
+    except Exception:
+        logger.critical('Unexpected error occured in joining threads', exc_info=True)

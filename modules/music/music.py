@@ -11,21 +11,44 @@ ydl_opts = {
         "outtmpl": "song.%(ext)s"
     }
 
+#  url = "https://www.youtube.com/watch?v=4TVT7IOqH1Y" #for now, for testing purposes
+#         with YoutubeDL(ydl_opts) as ydl:
+#             info = ydl.extract_info(url, download=True)
+#             filename = ydl.prepare_filename(info)
+        
+#         player = vlc.MediaPlayer(filename)
+#         player.play()
+#         time.sleep(10)
+#         player.pause()
+#         time.sleep(4)
+#         player.play()
+
+import logging
+logger = logging.getLogger('main.music')
+
+def music_is_playing():
+    return True #For now
+
+def stop_music():
+    logger.info('stopping music')
+
+def play_music():
+    logger.info('playing music')
+
 def music(queue):
     while True:
-        text = queue.get()
-        print(f'Text recieveed in music_thread: {text}')
-        url = "https://www.youtube.com/watch?v=4TVT7IOqH1Y" #for now, for testing purposes
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-        
-        player = vlc.MediaPlayer(filename)
-        player.play()
-        time.sleep(10)
-        player.pause()
-        time.sleep(4)
-        player.play()
+        try:
+            text = queue.get()
+            logger.debug(f'Text recieved in music_thread: {text}')
+            if text == 'end':
+                if music_is_playing():
+                    stop_music()
+                    logger.info('ending music')
+                break
+            else:
+                play_music()
+        except Exception as e:
+            logger.critical('Error occurred', e)
 
 
 

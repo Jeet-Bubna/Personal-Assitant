@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import patch
-from linker import linker
+from linker import linker, start_module_threads
 
 class TestLinker(unittest.TestCase):
 
