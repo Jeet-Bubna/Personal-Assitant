@@ -97,7 +97,7 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict) -> None:
         category = detect_category(msg)
         broadcasting_queue[category].put(msg)
 
-def start_module_threads(program_queue_map:dict) -> None:
+def start_module_threads(program_queue_map:dict) -> list[threading.Thread]:
     """
     Starts the threads of modules using a program_queue_map.
 
@@ -105,9 +105,12 @@ def start_module_threads(program_queue_map:dict) -> None:
     program_queue_map: The program-queue map, in the form {Queue object of the respective program: Program function}
     
     """
+    threads = []
     for key, value in program_queue_map.items():
-        _ = threading.Thread(target=value, daemon=True, args=(key,))
-        _.start()
+        thread = threading.Thread(target=value, daemon=True, args=(key,))
+        thread.start()
+        threads.append(thread)
+    return threads
 
 def linker():
     """
@@ -126,4 +129,9 @@ def linker():
     broadcaster_thread = threading.Thread(target=broadcaster, daemon=True, args=(main_queue, broadcasting_queue))
     broadcaster_thread.start()
 
-    start_module_threads(program_queue_map)
+    input_process.join()
+    broadcaster_thread.join()
+
+    threads = start_module_threads(program_queue_map)
+    for thread in threads:
+        thread.join()
