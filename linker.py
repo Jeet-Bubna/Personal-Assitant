@@ -7,10 +7,15 @@ from sentence_transformers import SentenceTransformer, util
 
 ACCEPTABLE_RATIO = 0.3
 NUM_MODULES = 3
+TIMEOUT_TIME = 4
 categories = {'music': 'music player', 'timer':'timer', 'search':'search', 'end':'end the program'}                       
 program_map = {'music':music.music, 'timer':timer.timer, 'search':search.search}
 
 # ********************************************************************************* #
+
+import logging
+logger = logging.getLogger("main.linker")
+logger.setLevel(logging.INFO)
 
 """
 
@@ -33,7 +38,6 @@ model = SentenceTransformer('all-MiniLM-L6-v2')                                 
 import copy
 real_categories = copy.deepcopy(categories)
 real_categories.pop('end')
-print('cat', categories, 'real cat', real_categories)
 
 
 ### For embeddings
@@ -69,16 +73,16 @@ def detect_category(text:str) -> str:
     tokens lmao.
 
     """
-
-    text_embedding = model.encode(text, normalize_embeddings=True)          # Finds the vector values for the text that we have inputed
-    scores = util.cos_sim(text_embedding, category_embeddigns)[0]           # Calculates the score
-    if scores.max().item() < ACCEPTABLE_RATIO:                          
-        return 'unknown'
-    else:
-        best_idx = scores.argmax().item()
-        print('best idx', best_idx)            
-        print(categories)              
-        return [key for key,_ in categories.items()][best_idx]
+    try:
+        text_embedding = model.encode(text, normalize_embeddings=True)          # Finds the vector values for the text that we have inputed
+        scores = util.cos_sim(text_embedding, category_embeddigns)[0]           # Calculates the score
+        if scores.max().item() < ACCEPTABLE_RATIO:                          
+            return 'unknown'
+        else:
+            best_idx = scores.argmax().item()      
+            return [key for key,_ in categories.items()][best_idx]
+    except KeyError:
+        logger.critical('Detect Category failed - key error', exc_info=True)
 
 
 def input_thread() -> None:
@@ -87,13 +91,16 @@ def input_thread() -> None:
 
     """
     while True:
-        text = input("Enter command: ").lower().strip()
-        category = detect_category(text)
-        main_queue.put(category)
+        try:
+            text = input("Enter command: ").lower().strip()
+            category = detect_category(text)
+            main_queue.put(category)
 
-        if category == 'end':
-            print('Terminating program')
-            break
+            if category == 'end':
+                logger.info('Terminating program')
+                break
+        except KeyboardInterrupt:
+            logger.debug('Keyboard interupted')
 
 def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str,queue.Queue]) -> None:
     """
@@ -106,17 +113,20 @@ def broadcaster(main_queue:queue.Queue, broadcasting_queue:dict[str,queue.Queue]
     """
     while True:
         category = main_queue.get()
-        print(f"Received message: {category}")
-        main_queue.task_done()
+        try:
+            logger.debug(f"Received message: {category}")
+            main_queue.task_done()
 
-        if category == 'end':
-            for _,q in broadcasting_queue.items():
-                q.put(category)
-            print('terminating broadcaster')
-            break
+            if category == 'end':
+                for _,q in broadcasting_queue.items():
+                    q.put(category)
+                logger.info('terminating broadcaster')
+                break
 
-        if category != 'unknown':
-            broadcasting_queue[category].put(category)
+            if category != 'unknown':
+                broadcasting_queue[category].put(category)
+        except Exception:
+            logger.critical('Unexpected error occured in broadcaster', exc_info=True)
 
         
 
@@ -129,11 +139,14 @@ def start_module_threads(program_queue_map:dict) -> list[threading.Thread]:
     
     """
     threads = []
-    for queue, program in program_queue_map.items():
-        thread = threading.Thread(target=program, daemon=True, args=(queue,))
-        thread.start()
-        threads.append(thread)
-    return threads
+    try:
+        for queue, program in program_queue_map.items():
+            thread = threading.Thread(target=program, daemon=True, args=(queue,))
+            thread.start()
+            threads.append(thread)
+        return threads
+    except RuntimeError:
+        logger.critical('THREAD CREATION FAILED', exc_info=True)
 
 def linker():
     """
@@ -146,21 +159,34 @@ def linker():
     into, and from there, it does its work with text. This allows all functions (music, search, timer, input) work even when something 
     is pre-occupied.
     """
+    try:
+        input_process = threading.Thread(target=input_thread, daemon=False)
+        input_process.start()
+        broadcaster_thread = threading.Thread(target=broadcaster, args=(main_queue, broadcasting_queue))
+        broadcaster_thread.start()
+        threads = start_module_threads(program_queue_map)
 
-    input_process = threading.Thread(target=input_thread, daemon=False)
-    input_process.start()
-    broadcaster_thread = threading.Thread(target=broadcaster, daemon=True, args=(main_queue, broadcasting_queue))
-    broadcaster_thread.start()
-    threads = start_module_threads(program_queue_map)
+    except RuntimeError:
+        logger.critical('Key threads failed to be created, TERMINATING', exc_info=True)
+        return
 
-    input_process.join()
-    print('input joined')
-    broadcaster_thread.join()
-    print('broadcaster joined')
+    try:
+        input_process.join(timeout=TIMEOUT_TIME)
+        logger.info('input joined')
+        broadcaster_thread.join(timeout=TIMEOUT_TIME)
+        logger.info('broadcaster joined')
 
-    for thread in threads:
-        print(f"joining", thread)
-        thread.join()
-        print(f"{thread} joined")
-    
-    print('Program successfully terinated')
+        for thread in threads:
+            logger.info(f"joining", thread)
+            thread.join(timeout=TIMEOUT_TIME)
+            if thread.is_alive() == False:
+                logger.info(f"{thread} joined")
+            else:
+                logger.critical(f'{thread} failed to join')
+                # impement a kill switch
+                break
+
+        logger.info('Program successfully terinated')
+        return
+    except Exception:
+        logger.critical('Unexpected error occured in joining threads', exc_info=True)

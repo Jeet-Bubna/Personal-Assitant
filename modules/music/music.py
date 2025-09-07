@@ -23,29 +23,32 @@ ydl_opts = {
 #         time.sleep(4)
 #         player.play()
 
+import logging
+logger = logging.getLogger('main.music')
+
 def music_is_playing():
     return True #For now
 
 def stop_music():
-    print('stopping music')
+    logger.info('stopping music')
 
 def play_music():
-    print('playing music')
+    logger.info('playing music')
 
 def music(queue):
     while True:
         try:
             text = queue.get()
-            print(f'Text recieveed in music_thread: {text}')
+            logger.debug(f'Text recieved in music_thread: {text}')
             if text == 'end':
                 if music_is_playing():
                     stop_music()
-                    print('ending music')
+                    logger.info('ending music')
                 break
             else:
                 play_music()
         except Exception as e:
-            print('Error occurred', e)
+            logger.critical('Error occurred', e)
 
 
 
