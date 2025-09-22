@@ -2,7 +2,7 @@ from linker import linker
 import logging
 import sys
 # === Logger Configuration ===
-logger = logging.getLogger("main")  # give your logger a name
+logger = logging.getLogger("main")
 
 def init_logger():
 
