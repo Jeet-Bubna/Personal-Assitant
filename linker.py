@@ -171,9 +171,9 @@ def linker():
         return
 
     try:
-        input_process.join(timeout=TIMEOUT_TIME)
+        input_process.join()
         logger.info('input joined')
-        broadcaster_thread.join(timeout=TIMEOUT_TIME)
+        broadcaster_thread.join()
         logger.info('broadcaster joined')
 
         for thread in threads:
